@@ -3,6 +3,7 @@ from tkinter import Image, messagebox
 import sqlite3
 from tkinter import ttk
 from PIL import Image, ImageTk
+import numpy as np
 
 class Libro:
     db_name = 'database.db'
@@ -53,31 +54,38 @@ class Libro:
      
     def devolverse(self, bookID ,miembro_id):
 
-        query0="SELECT estado FROM libros WHERE bookID = ?" 
-        parametros1 =(bookID,)
-        estadoLibro= self.run_query(query0,parametros1).fetchone()
+        try: 
 
-        if not estadoLibro:  
-         return f"Error: No se encontró un libro con el ID {bookID}."
+            query0="SELECT estado FROM libros WHERE bookID = ?" 
+            parametros1 =(bookID,)
+            estadoLibro= self.run_query(query0,parametros1).fetchone()
 
-        estado= estadoLibro[0]
+            if not estadoLibro:  
+                return f"Error: No se encontró un libro con el ID {bookID}."
 
-        if estado == "Disponible":
-            return f"El libro no ha sido prestado"
+            estado= estadoLibro[0]
+
+            if estado == "Disponible":
+                return f"El libro no ha sido prestado"
+                
+            queryN= "SELECT nombre FROM miembros WHERE id_miembro = ?"
+            parametrosN = (miembro_id,)
+            nombreN = self.run_query(queryN, parametrosN).fetchone()
+            nombre_miembro = nombreN[0]
             
-        queryN= "SELECT nombre FROM miembros WHERE id_miembro = ?"
-        parametrosN = (miembro_id,)
-        nombreN = self.run_query(queryN, parametrosN).fetchone()
-        nombre_miembro = nombreN[0]
-        
-        if not nombre_miembro:
-            return f"Error: No se encontró un miembro con el ID {miembro_id}."
-        
-        queryP="UPDATE libros SET estado = ? WHERE BookID = ?"
-        parametrosQ=("Disponible",bookID,)
-        self.run_query(queryP, parametrosQ)
+            if not nombre_miembro:
+                return f"Error: No se encontró un miembro con el ID {miembro_id}."
+            
+            queryP="UPDATE libros SET estado = ? WHERE BookID = ?"
+            parametrosQ=("Disponible",bookID,)
+            self.run_query(queryP, parametrosQ)
 
-        return f"El libro con ID {bookID} ha sido devuelto por {nombre_miembro}."
+            return f"El libro con ID {bookID} ha sido devuelto por {nombre_miembro}."
+        
+        except Exception as e:
+            return f"Ingreso datos incorrectos"
+        
+
 
 class Usuario:
     def __init__(self, nombre):
@@ -107,18 +115,35 @@ class Miembro(Usuario):
         print(f"Parametros a insertar: {parametros}.")
         print(f"Miembro agregado: {nombre}, ID: {id_miembro}, Membresía: {meses} meses")                   
         return f'{self.nombre} ha obtenido una membresía por {meses} meses.'
+
+    def obtener_tiempo_membresia(self, id_miembro):
+        query = 'SELECT tiempo_membresia FROM miembros WHERE id_miembro = ?'
+        parametros = (id_miembro,)
+        resultado = self.run_query(query, parametros).fetchone()
+        return resultado[0] if resultado else 0
+
+    def extender_membresia(self, meses_actuales, meses_nuevos):
+                if meses_nuevos == 0:
+                    return meses_actuales
+            
+                return self.extender_membresia(meses_actuales + 1, meses_nuevos - 1)
     
     def renovar_membresia(self, meses):
         if meses <= 0:
             return'La cantidad de meses debe ser mayor a 0'
         
-        self.tiempo_membresia += meses
-        
+        self.tiempo_membresia = self.obtener_tiempo_membresia(self.id_miembro)
+        extender = self.extender_membresia(self.tiempo_membresia, meses)
+        self.tiempo_membresia = extender
+
         query = "UPDATE miembros SET tiempo_membresia = ? WHERE id_miembro = ?"
         parametros = (self.tiempo_membresia, self.id_miembro)
         self.run_query(query, parametros)
 
-        return f'La membresía de {self.nombre} ha sido renovada por {meses} meses.'
+        if meses==1 :
+            return f'La membresía ha sido renovada por {meses} mes mas ,ahora cuenta con {self.tiempo_membresia} meses restantes.' 
+        else :
+            return f'La membresía ha sido renovada por {meses} meses mas ,ahora cuenta con {self.tiempo_membresia} meses restantes.'
     
     
     def eliminar_membresia(self):
@@ -238,8 +263,6 @@ class Biblioteca:
 
     def mostrar_miembros(self):
         return "\n".join(str(miembro) for miembro in self.miembros) if self.miembros else "No hay miembros registrados."
-    
-    
 
 
 def agregar_libro():
@@ -414,7 +437,7 @@ def abrir_agregar_miembro():
 
         try:
             miembro = Miembro("", id_miembro, 0)
-            resultado = miembro.renovar_membresia(id_miembro, int(meses))
+            resultado = miembro.renovar_membresia(int(meses))
             messagebox.showinfo("Éxito", resultado)
             ventana_miembro.destroy()
         except Exception as e:
@@ -433,7 +456,7 @@ def abrir_agregar_miembro():
         if confirmacion:
             try:
                 miembro = Miembro("", id_miembro, 0)
-                resultado = miembro.eliminar_miembro(id_miembro)
+                resultado = miembro.eliminar_membresia()
                 if resultado:
                     messagebox.showinfo("Éxito", f"Miembro con ID {id_miembro} eliminado correctamente.")
                 ventana_miembro.destroy()
